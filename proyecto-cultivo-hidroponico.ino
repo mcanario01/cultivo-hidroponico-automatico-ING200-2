@@ -187,7 +187,7 @@ void loop() {
 
   analogWrite(LED1, intensidad_de_LEDs);  //escribe el estado del LED
 
-  analoglWrite(BOMBA_AGUA, intensidad_de_bomba);  //escribe el estado de la bomba de agua
+  analogWrite(BOMBA_AGUA, intensidad_de_bomba);  //escribe el estado de la bomba de agua
 
   if (boton_interfaz.isPressed()) {
     pantalla_interfaz_actual++;
@@ -290,3 +290,4 @@ void loop() {
         }
       }
   }
+}
