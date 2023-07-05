@@ -6,6 +6,10 @@
 #include <DHT_U.h>
 
 #define CANTIDAD_DE_PANTALLAS 3 //define cantidad de pantallas de la interfaz de la pantalla LCD
+#define PANTALLA_FIJA false //true para pantallas fijas, false para pantalla dinámica
+#define PANTALLA_ACTUAL 1 //pantalla hardcodeada, no hace nada si la pantalla está en modo dinámico
+#define ANIMACION_INICIO false //animación de inicio activada
+#define DEBUG_ACTIVADO false //true para activa el debug, false para desactivarlo.
 
 #define DELAY_PANTALLA 1000 //define el tiempo de refresco de la pantalla en mili hercios
 #define LIMITE_INFERIOR_SENSOR_LUZ 0 //define el rango minimo de lectura del sensor de luz
@@ -17,9 +21,10 @@
 #define DIRECCION_LCD 0x27 //define la dirección de memoria de la interfaz I2C
 
 //PINES BOTON Y LED
-#define BOTON2 9 //define el pin del boton de interfaz
+#define BOTON2 2 //define el pin del boton de interfaz
 #define BOTON1 4 //define el pin de interacción
 #define LED1 6 //define el pin de los LED
+#define MAXIMA_INTENSIDAD_LED 255
 
 //MODULO TEMPERATURA Y HUMEDAD
 #define DHTPIN 7 //define el pin del sensor de temperatura y humedad
@@ -33,6 +38,7 @@
 
 //BOMBA DE AGUA
 #define BOMBA_AGUA 3 //define el pin de la bomba de agua
+#define MAXIMA_INTENSIDAD_BOMBA 255 //define la máxima intensidad de la bomba
 
 //BOCINA
 #define BOCINA 5 //define el pin del buzzer
@@ -124,6 +130,8 @@ byte icono_nivel_luz[8] = {
 
 bool estadoLed = 0; //controla el estado de los LED (despreciado)
 
+int intensidad_anterior_de_LEDs =  0; //controla la intensidad de una instancia anterior de los LEDs
+
 unsigned long millis_pasados_pantalla = 0; //controla la variable de la diferencia de tiempo
 
 int pantalla_interfaz_actual = 1; //controla la variable de la pantalla actual
@@ -147,8 +155,8 @@ void setup() {
   pinMode(BOMBA_AGUA, OUTPUT);         //declara bomba de agua
   pinMode(LED1, OUTPUT);               //declara pin de LEDs
   pinMode(BOCINA, OUTPUT);             //declara pin de BUZZER
-  boton.setDebounceTime(50);           //declara tiempo de refresco de boton
-  boton_interfaz.setDebounceTime(50);  //declara el tiempo de refresco de boton_interfaz
+  boton.setDebounceTime(25);           //declara tiempo de refresco de boton
+  boton_interfaz.setDebounceTime(25);  //declara el tiempo de refresco de boton_interfaz
 
   //INICIALIZACIÓN DE CARACTERES PERSONALIZADOS
   pantalla.createChar(0, icono_alerta);
@@ -160,52 +168,71 @@ void setup() {
   pantalla.createChar(6, icono_nivel_luz);
 
   //ANIMACIÓN DE INICIO
-  pantalla.setCursor(4, 0);
-  pantalla.print("Proyecto");
-  pantalla.setCursor(3, 1);
-  pantalla.print("H.I.D.R.O.");
-  delay(2000);
-  pantalla.clear();
-  pantalla.setCursor(3, 0);
-  pantalla.print("Taller de");
-  pantalla.setCursor(2, 1);
-  pantalla.print("Diseno UFRO.");
-  delay(2000);
-  pantalla.clear();
-  pantalla.setCursor(0, 0);
-  pantalla.print("Autores: MC, JV,");
-  pantalla.setCursor(0, 1);
-  pantalla.print("GA, SQ, DC.");
-  delay(2000);
-  pantalla.clear();
+  if(ANIMACION_INICIO)
+    {
+          
+      pantalla.setCursor(4, 0);
+      pantalla.print("Proyecto");
+      pantalla.setCursor(3, 1);
+      pantalla.print("H.I.D.R.O.");
+      delay(2000);
+      pantalla.clear();
+      pantalla.setCursor(3, 0);
+      pantalla.print("Taller de");
+      pantalla.setCursor(2, 1);
+      pantalla.print("Diseno UFRO.");
+      delay(2000);
+      pantalla.clear();
+      pantalla.setCursor(0, 0);
+      pantalla.print("Autores: MC, JV,");
+      pantalla.setCursor(0, 1);
+      pantalla.print("GA, SQ, DC.");
+      delay(2000);
+      pantalla.clear();    
+  }
 }
 
 void loop() {
+
+  Serial.print(boton_interfaz.isPressed());
+  Serial.print(" - ");
   //BOTON Y ESCRITURA DE LED ------------------------------
   boton.loop();           //actualización del valor del boton
   boton_interfaz.loop();  //actualización del valor del boton_interfaz
-
-  analogWrite(LED1, intensidad_de_LEDs);  //escribe el estado del LED
+  if(!estadoLed)
+  {
+    analogWrite(LED1, 0);  //escribe el estado del LED
+  }
+  else{
+    analogWrite(LED1, intensidad_de_LEDs);
+  }
+  
 
   analogWrite(BOMBA_AGUA, intensidad_de_bomba);  //escribe el estado de la bomba de agua
 
-  if (boton_interfaz.isPressed()) {
+
+  if (boton_interfaz.isPressed() && !PANTALLA_FIJA) {
     pantalla_interfaz_actual++;
     if (pantalla_interfaz_actual > CANTIDAD_DE_PANTALLAS) {
       pantalla_interfaz_actual = 1;
     }
+    pantalla.clear();
   }
+  if(PANTALLA_FIJA)
+  {
+    pantalla_interfaz_actual = PANTALLA_ACTUAL;
+    Serial.print("PANTALLA FIJA - ");
+  }  
 
   //ESCRUTURA EN PANTALLA ---------------------------------
   //pantalla.clear();
 
-  switch (pantalla_interfaz_actual) {
+  if (pantalla_interfaz_actual== 1) 
 
     //Pantalla 1 - Vista general de datos
-    case 1:
-      {
+    {
         pantalla.setCursor(15, 0);  //escritura de icono de LEDs
-        if (estadoLed) {
+        if (estadoLed && intensidad_de_LEDs != 0) {
           pantalla.print((char)3);  //escritura de icono_luz_encendida
         } else {
           pantalla.print((char)4);  //escritura de icono_luz_apagada
@@ -247,47 +274,87 @@ void loop() {
           Serial.print(" - ");
           Serial.println(-(1 / sqrt(map(analogRead(NIVEL_LUZ), LIMITE_INFERIOR_SENSOR_LUZ, LIMITE_SUPERIOR_SENSOR_LUZ, 0, 99))) + 99);
         }
+        if(boton.isPressed())
+        {
+          estadoLed = !estadoLed;
+        }
+
+        //DEBUG
+        Serial.print(pantalla_interfaz_actual);
+        Serial.print(" - ");
+        Serial.println("DEBUG - HOME");
       }
 
     //Pantalla 2 - Ajuste de LEDS
-    case 2:
+    else if (pantalla_interfaz_actual == 2)
       {
         pantalla.setCursor(0, 0);
         pantalla.print("Ajuste de LEDs");
-        pantalla.setCursor(0, 0);
+        pantalla.setCursor(0, 1);
 
-        if (intensidad_de_LEDs != 0) {
+        if (estadoLed && intensidad_de_LEDs != 0) {
           pantalla.print((char)3);  //escritura de icono_luz_encendida
         } else {
           pantalla.print((char)4);  //escritura de icono_luz_apagada
         }
+        
         pantalla.setCursor(3, 1);
-        pantalla.print(map(intensidad_de_LEDs, 0, 1023, 0, 10));
+        pantalla.print(map(intensidad_de_LEDs, 0, MAXIMA_INTENSIDAD_LED, 0, 10));
 
         if (boton.isPressed())  //pregunta si el boton fué presionado
         {
-          intensidad_de_LEDs = intensidad_de_LEDs + 102;
-          if (intensidad_de_LEDs > 1023) {
+          estadoLed = true;
+          intensidad_de_LEDs = intensidad_de_LEDs + (int)MAXIMA_INTENSIDAD_LED/10;
+          if (intensidad_de_LEDs > MAXIMA_INTENSIDAD_LED) {
             intensidad_de_LEDs = 0;
           }
         }
+
+        //DEBUG
+        Serial.print(pantalla_interfaz_actual);
+        Serial.print(" - ");
+        Serial.println("DEBUG - AJUSTE LED");
+        
       }
 
-    case 3:
+    else if (pantalla_interfaz_actual == 3)
       {
         pantalla.setCursor(0, 0);
         pantalla.print("Ajuste de Bomba");
         pantalla.setCursor(0, 0);
         pantalla.setCursor(3, 1);
-        pantalla.print(map(intensidad_de_bomba, 0, 1023, 0, 10));
+        pantalla.print(map(intensidad_de_bomba, 0, MAXIMA_INTENSIDAD_BOMBA, 0, 10));
 
         if (boton.isPressed())  //pregunta si el boton fué presionado
         {
-          intensidad_de_bomba = intensidad_de_bomba + 102;
-          if (intensidad_de_bomba > 1023) {
+          intensidad_de_bomba = intensidad_de_bomba + (int)MAXIMA_INTENSIDAD_BOMBA / 10;
+          if (intensidad_de_bomba > MAXIMA_INTENSIDAD_BOMBA) {
             intensidad_de_bomba = 0;
           }
         }
+
+        //DEBUG
+        Serial.print(pantalla_interfaz_actual);
+        Serial.print(" - ");
+        Serial.println("DEBUG - AJUSTE BOMBA");
+        
       }
-  }
+      else
+      {
+        Serial.println("ERROR DE PANTALLA");
+      }
 }
+
+/*
+void debug(bool debug, char etapa[])
+{
+  if(debug)
+  {
+    Serial.println(strcat("Debug - ", ));
+    Serial.println("\n");
+  }
+  else 
+  {
+    return;
+  }
+}*/
